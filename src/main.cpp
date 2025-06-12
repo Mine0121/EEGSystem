@@ -1,4 +1,5 @@
 #include <M5Unified.h>          // 画面とボタン・電源管理など
+#include <ArduinoFFT.h>         // FFT で β/α 比算出
 HardwareSerial TGAMSerial(1);   // UART1 を TGAM 専用に使う
 
 // --- ピン設定 ---
@@ -16,6 +17,29 @@ uint8_t  poorQuality = 0;
 uint8_t  attention   = 0;
 uint8_t  meditation  = 0;
 
+// --- FFT 用バッファと計算設定 ---
+constexpr size_t SAMPLE_SIZE  = 512;   // 512 サンプル (約1秒)
+constexpr size_t UPDATE_STEP  = 32;    // 32 サンプルごとに更新
+constexpr size_t AVG_COUNT    = 8;     // FFT 結果を8回平均
+
+int16_t rawBuffer[SAMPLE_SIZE];        // 生波形リングバッファ
+size_t  rawIndex     = 0;              // 書き込み位置
+size_t  sampleTotal  = 0;              // 累積サンプル数
+
+double  vReal[SAMPLE_SIZE];            // FFT 入力 (実数部)
+double  vImag[SAMPLE_SIZE];            // FFT 入力 (虚数部)
+
+ArduinoFFT<double> FFT(vReal, vImag, SAMPLE_SIZE, 512);
+
+float   graphBuffer[120];             // グラフ表示用履歴
+size_t  graphIndex = 0;
+size_t  graphNum   = 0;
+
+float   ratioBuffer[AVG_COUNT];       // β/α 比平均用
+size_t  ratioPos   = 0;
+
+float   avgBA      = 0.0f;            // 最新の平均β/α比
+
 // 1 バイトだけブロッキングで読む（TGAMSerial 版）
 uint8_t readTGAMByte() {
   while (!TGAMSerial.available()) {
@@ -32,6 +56,48 @@ void drawValues() {
   M5.Display.printf("Signal: %3u\n", poorQuality);
   M5.Display.printf("Attend : %3u\n", attention);
   M5.Display.printf("Meditat: %3u\n", meditation);
+  M5.Display.printf("B/A   : %4.2f\n", avgBA);
+}
+
+// β/α 比を計算
+float calcBetaAlpha() {
+  for (size_t i = 0; i < SAMPLE_SIZE; ++i) {
+    size_t idx = (rawIndex + i) % SAMPLE_SIZE;
+    vReal[i] = rawBuffer[idx];
+    vImag[i] = 0.0;
+  }
+
+  FFT.windowing(FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+  FFT.compute(FFT_FORWARD);
+  FFT.complexToMagnitude();
+
+  double alpha = 0.0;
+  for (uint8_t i = 8; i <= 12; ++i) alpha += vReal[i];
+  double beta = 0.0;
+  for (uint8_t i = 13; i <= 30; ++i) beta += vReal[i];
+
+  if (alpha == 0.0) return 0.0f;
+  return beta / alpha;
+}
+
+// グラフ描画（右端に1点追加）
+void drawGraph(float ratio) {
+  constexpr int graphX = 0;
+  constexpr int graphY = 80;
+  constexpr int graphH = 40;
+  constexpr int graphW = 120;
+
+  graphBuffer[graphIndex] = ratio;
+  graphIndex = (graphIndex + 1) % graphW;
+  if (graphNum < graphW) graphNum++;
+
+  M5.Display.fillRect(graphX, graphY - graphH, graphW, graphH, TFT_BLACK);
+  for (size_t i = 0; i < graphNum; ++i) {
+    size_t idx = (graphIndex + i) % graphW;
+    int h = static_cast<int>(graphBuffer[idx] * 10.0f);
+    if (h > graphH) h = graphH;
+    M5.Display.drawFastVLine(graphX + i, graphY - h, h, TFT_GREEN);
+  }
 }
 
 void setup() {
@@ -86,6 +152,24 @@ void loop() {
         meditation  = payload[++i];
         break;
       case 0x80:   // Raw EEG (2 バイト ×2)
+        if (i + 3 < payloadLen && payload[i+1] == 0x02) {
+          int16_t v = (static_cast<int16_t>(payload[i+2]) << 8) | payload[i+3];
+          rawBuffer[rawIndex] = v;
+          rawIndex = (rawIndex + 1) % SAMPLE_SIZE;
+          sampleTotal++;
+          if (sampleTotal >= SAMPLE_SIZE && (sampleTotal % UPDATE_STEP) == 0) {
+            float ratio = calcBetaAlpha();
+            drawGraph(ratio);
+
+            ratioBuffer[ratioPos % AVG_COUNT] = ratio;
+            ratioPos++;
+            size_t count = ratioPos < AVG_COUNT ? ratioPos : AVG_COUNT;
+            float sum = 0.0f;
+            for (size_t n = 0; n < count; ++n) sum += ratioBuffer[n];
+            avgBA = sum / count;
+            drawValues();
+          }
+        }
         i += 3;
         break;
       case 0x83:   // EEG バンドパワー (24 バイト)
