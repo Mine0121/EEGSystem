@@ -5,7 +5,7 @@
 #include "FFT.h"
 #include <math.h>               // sqrtf
 
-#ifdef TWO_PI                  // FFT.h が再定義するので警告回避
+#ifdef TWO_PI               
 #undef TWO_PI
 #endif
 #define TWO_PI 6.28318530f
