@@ -49,7 +49,8 @@ static uint32_t splashTick = 0;
  * ===================================================== */
 void drawGraph(float latest)
 {
-  /* 文字エリア：40px (2 行) */
+  /*
+  // 文字エリア：40px (2 行)
   M5.Display.fillRect(0, 0, DISP_W, 40, TFT_BLACK);
   M5.Display.setTextSize(2);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -60,7 +61,7 @@ void drawGraph(float latest)
   M5.Display.setCursor(0, 20);
   M5.Display.printf("Signal %-3u", signalQuality);
 
-  /* スケール決定 */
+  // スケール決定
   float vmin = 1e9f, vmax = -1e9f;
   for (uint16_t i = 0; i < DISP_W; ++i) {
     vmin = fminf(vmin, ratioHist[i]);
@@ -70,16 +71,17 @@ void drawGraph(float latest)
   vmax = fminf(5.0f, vmax);
   float scale = (vmax > vmin) ? GRAPH_H / (vmax - vmin) : 1.0f;
 
-  /* グラフエリア消去 */
+  // グラフエリア消去
   M5.Display.fillRect(0, GRAPH_Y0 - GRAPH_H + 1, DISP_W, GRAPH_H, TFT_BLACK);
 
-  /* 描画 */
+  // 描画
   for (uint16_t x = 0; x < DISP_W; ++x) {
     uint16_t idx = (histPos + x) % DISP_W;
     int h = int((ratioHist[idx] - vmin) * scale);
     h = h < 0 ? 0 : (h > GRAPH_H ? GRAPH_H : h);
     M5.Display.drawFastVLine(x, GRAPH_Y0 - h, h == 0 ? 1 : h, TFT_CYAN);
   }
+  */
 }
 
 /* ---- FFT → β/α 計算 ---- */
