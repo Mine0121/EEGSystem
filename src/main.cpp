@@ -49,7 +49,6 @@ static uint32_t splashTick = 0;
  * ===================================================== */
 void drawGraph(float latest)
 {
-  /*
   // 文字エリア：40px (2 行)
   M5.Display.fillRect(0, 0, DISP_W, 40, TFT_BLACK);
   M5.Display.setTextSize(2);
@@ -61,6 +60,7 @@ void drawGraph(float latest)
   M5.Display.setCursor(0, 20);
   M5.Display.printf("Signal %-3u", signalQuality);
 
+  /*
   // スケール決定
   float vmin = 1e9f, vmax = -1e9f;
   for (uint16_t i = 0; i < DISP_W; ++i) {
